@@ -40,17 +40,20 @@ export default function Landing() {
           font-weight: 800;
           letter-spacing: 1px;
           line-height: 1;
-          font-size: 8vw;
+          font-size: 6vw;
           white-space: nowrap;
           max-width: 100%;
           margin-bottom: 10px;
-      }
-      @media (min-width: 500px) { 
-        .np-logo-text { 
-          font-size: clamp(28px, 8vw, 72px); 
-          letter-spacing: 4px; 
-        } 
-      }
+        }
+        @media (min-width: 400px) {
+            .np-logo-text { font-size: 7vw; }
+        }
+        @media (min-width: 600px) {
+            .np-logo-text { font-size: 8vw; letter-spacing: 3px; }
+        }
+        @media (min-width: 900px) {
+            .np-logo-text { font-size: 72px; letter-spacing: 4px; }
+        }
 
         /* Tagline */
         .np-tagline {
