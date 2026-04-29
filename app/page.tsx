@@ -251,9 +251,11 @@ export default function Landing() {
       </div>
 
       {/* Logo */}
+    <div style={{ width: "100%", overflow: "hidden", textAlign: "center" }}></div>
       <div className="np-logo np-logo-text">
         NARRATIVE<span style={{ color: "#f5821f" }}>PULSE</span>
       </div>
+    </div>
 
       {/* Tagline */}
       <div className="np-logo np-tagline">Does the story match the numbers?</div>
