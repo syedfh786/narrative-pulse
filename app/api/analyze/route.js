@@ -145,7 +145,7 @@ Return ONLY valid JSON (no markdown fences) with this exact structure:
   "realityScore": 72,
   "sentimentSignal": "BULLISH",
   "fundamentalSignal": "BULLISH",
-  "narrativeAlignment": "ALIGNED",
+  "narrativeAlignment": "ALIGNED" or "DIVERGENT" or "CONTRARIAN",
   "contrarian": false,
   "headlines": [{"title":"...","sentiment":"positive","source":"...","publishedAt":"YYYY-MM-DD"}],
   "financialSnapshot": {"revenue":"...","eps":"...","guidance":"...","keyMetric":"..."},

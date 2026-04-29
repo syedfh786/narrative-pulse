@@ -231,7 +231,7 @@ export default function Dashboard() {
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                       <Pill label={`MEDIA: ${report.sentimentSignal}`} color={sentColor(report.sentimentSignal)} />
                       <Pill label={`FUNDAMENTALS: ${report.fundamentalSignal}`} color={sentColor(report.fundamentalSignal)} />
-                      <Pill label={report.narrativeAlignment} color={report.narrativeAlignment === "ALIGNED" ? "green" : report.narrativeAlignment?.includes("DIVERGE") ? "orange" : "red"} />
+                      <Pill label={report.narrativeAlignment || "DIVERGENT"} color={report.narrativeAlignment === "ALIGNED" ? "green" : report.narrativeAlignment === "CONTRARIAN" ? "red" : "orange"} />VERGE") ? "orange" : "red"} />
                       {report.contrarian && <Pill label="⚡ CONTRARIAN SIGNAL" color="orange" />}
                     </div>
                     <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: C.textDim, letterSpacing: 2 }}>DATA AS OF {report.dataAsOf} · POWERED BY CLAUDE AI</div>
@@ -374,7 +374,7 @@ export default function Dashboard() {
                     {[
                       { label: "Media Sentiment", value: report.sentimentSignal },
                       { label: "Fundamental Signal", value: report.fundamentalSignal },
-                      { label: "Alignment", value: report.narrativeAlignment },
+                      { label: "Alignment", value: report.narrativeAlignment || "DIVERGENT" },tiveAlignment },
                     ].map(item => (
                       <StatCard key={item.label} label={item.label.toUpperCase()} value={item.value || "—"} />
                     ))}
