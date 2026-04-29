@@ -9,7 +9,10 @@ export default function Landing() {
       justifyContent: "center", fontFamily: "'Outfit', sans-serif",
       color: "#e8e8e8", textAlign: "center",
       padding: "40px 20px",
-      position: "relative", overflow: "hidden",
+      overflow: "hidden",
+      width: "100%",
+      maxWidth: "100vw",
+      position: "relative", 
       boxSizing: "border-box",
     }}>
       <style>{`
@@ -35,11 +38,15 @@ export default function Landing() {
         .np-logo-text {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          letter-spacing: 4px;
+          letter-spacing: 2px;
           line-height: 1;
-          font-size: clamp(28px, 10vw, 72px);
+          font-size: 10vw;
+          max-width: 100%;
+          overflow: hidden;
+          word-break: break-word;
           margin-bottom: 10px;
-        }
+      }
+      @media (min-width: 500px) { .np-logo-text { font-size: clamp(28px, 8vw, 72px); letter-spacing: 4px; } }
 
         /* Tagline */
         .np-tagline {
