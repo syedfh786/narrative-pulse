@@ -98,8 +98,10 @@ export default function Landing() {
         {[
           { icon: "◈", title: "Reality Score", desc: "0–100 score quantifying the gap between what media says and what financials show." },
           { icon: "◉", title: "Live Headlines", desc: "Real news from today, sentiment-classified and cross-referenced against earnings data." },
-          { icon: "⚡", title: "Contrarian Alerts", desc: "When the crowd is wrong, we flag it. Premium feature for spotting market mispricings." },
+          { icon: "⚡", title: "Contrarian Alerts", desc: "When the crowd is wrong, we flag it. Spot mispricings before the market corrects." },
           { icon: "◆", title: "Smart Financials", desc: "Revenue, EPS, insider trades, analyst targets, and options sentiment in one view." },
+          { icon: "🏛️", title: "Insider Intelligence", desc: "Track what executives and institutions are actually buying and selling — not what they say." },
+          { icon: "🎯", title: "Analyst Gap", desc: "See where Wall Street price targets diverge from reality and what that historically means." },   
         ].map(f => (
           <div key={f.title} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "20px 20px", textAlign: "left" }}>
             <div style={{ fontFamily: "'Syne'", fontSize: 20, color: "#f5821f", marginBottom: 8 }}>{f.icon} {f.title}</div>
