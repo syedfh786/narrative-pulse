@@ -5,11 +5,9 @@ import Head from "next/head";
 const ORANGE = "#f5821f";
 const FREE_LIMIT = 5;
 
-// ── Softer dark palette ───────────────────────────────────────────────────
 const C = {
   bg: "#111318",
   bgCard: "#181c24",
-  bgCardHover: "#1e2330",
   border: "#252a36",
   borderLight: "#2e3545",
   text: "#d4d8e2",
@@ -72,12 +70,11 @@ function Pill({ label, color }) {
   );
 }
 
-function StatCard({ label, value, sub, color }) {
+function StatCard({ label, value, color }) {
   return (
     <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "16px 20px" }}>
       <div style={{ fontFamily: "'DM Mono'", fontSize: 9, letterSpacing: 3, color: C.textDim, marginBottom: 8 }}>{label}</div>
       <div style={{ fontFamily: "'Syne'", fontSize: 22, fontWeight: 800, color: color || C.text }}>{value}</div>
-      {sub && <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
@@ -95,6 +92,114 @@ function SignalCard({ icon, title, value, detail, color }) {
   );
 }
 
+// ── Plain English Card ─────────────────────────────────────────────────────
+function PlainEnglishCard({ report }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+
+  const fetch_ = async () => {
+    if (text) { setOpen(!open); return; }
+    setOpen(true);
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setText(data.explanation);
+    } catch (e) {
+      setError("Could not generate explanation. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      {/* Floating button */}
+      <button onClick={fetch_} style={{
+        display: "flex", alignItems: "center", gap: 10,
+        background: open ? "#1a1f2e" : "linear-gradient(135deg, #1a1f2e, #1e2535)",
+        border: `1px solid ${open ? C.orange + "66" : C.borderLight}`,
+        borderRadius: 8, padding: "12px 20px", cursor: "pointer",
+        fontFamily: "'Outfit'", fontSize: 14, fontWeight: 600,
+        color: open ? C.orange : C.text, letterSpacing: 0.5,
+        transition: "all 0.2s", width: "100%", justifyContent: "center",
+        boxShadow: open ? `0 0 20px ${C.orange}18` : "none",
+      }}>
+        <span style={{ fontSize: 18 }}>🗣️</span>
+        {open && text ? "Hide Plain English Summary" : "Explain This In Plain English"}
+        <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: C.textMuted, marginLeft: 4 }}>
+          {open && text ? "↑" : "→"}
+        </span>
+      </button>
+
+      {/* Expanded card */}
+      {open && (
+        <div style={{
+          marginTop: 12,
+          background: "linear-gradient(135deg, #16191f, #1a1e28)",
+          border: `1px solid ${C.orange}33`,
+          borderRadius: 10, padding: "28px 32px",
+          animation: "fadeIn 0.3s ease",
+          position: "relative", overflow: "hidden",
+        }}>
+          {/* Warm glow */}
+          <div style={{ position: "absolute", top: -40, right: -40, width: 200, height: 200, background: `radial-gradient(circle, ${C.orange}08, transparent 70%)`, pointerEvents: "none" }} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <span style={{ fontSize: 22 }}>🗣️</span>
+            <div>
+              <div style={{ fontFamily: "'Syne'", fontWeight: 800, fontSize: 16, color: C.text }}>Plain English Summary</div>
+              <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: C.textDim, letterSpacing: 2, marginTop: 2 }}>
+                {report.companyName} · {report.ticker} · AS OF {report.dataAsOf}
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto" }}>
+              <Pill label={`REALITY SCORE: ${report.realityScore}`} color={report.realityScore >= 70 ? "green" : report.realityScore >= 40 ? "orange" : "red"} />
+            </div>
+          </div>
+
+          {loading && (
+            <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 0" }}>
+              <div style={{ width: 24, height: 24, border: `2px solid ${C.border}`, borderTop: `2px solid ${C.orange}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+              <div style={{ fontFamily: "'Outfit'", fontSize: 14, color: C.textMuted, fontWeight: 300 }}>
+                Translating financial data into plain English…
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ fontFamily: "'Outfit'", fontSize: 13, color: C.red, padding: "12px 0" }}>⚠ {error}</div>
+          )}
+
+          {text && !loading && (
+            <div>
+              {text.split("\n\n").filter(p => p.trim()).map((para, i) => (
+                <p key={i} style={{
+                  fontFamily: "'Outfit'", fontSize: 15.5, color: i === text.split("\n\n").filter(p => p.trim()).length - 1 ? "#fff" : C.text,
+                  lineHeight: 1.85, margin: "0 0 16px 0", fontWeight: i === text.split("\n\n").filter(p => p.trim()).length - 1 ? 500 : 300,
+                  borderLeft: i === text.split("\n\n").filter(p => p.trim()).length - 1 ? `3px solid ${C.orange}` : "none",
+                  paddingLeft: i === text.split("\n\n").filter(p => p.trim()).length - 1 ? 16 : 0,
+                }}>
+                  {para.trim()}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [ticker, setTicker] = useState("");
   const [loading, setLoading] = useState(false);
@@ -115,6 +220,7 @@ export default function Dashboard() {
       return;
     }
     setError(""); setReport(null); setLoading(true);
+    setActiveTab("report");
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -146,14 +252,13 @@ export default function Dashboard() {
       <Head>
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" />
       </Head>
-      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit', sans-serif", position: "relative" }}>
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit', sans-serif" }}>
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
           @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
           input:focus { border-color: ${C.orange}66 !important; box-shadow: 0 0 0 3px ${C.orange}0f; }
           * { box-sizing: border-box; }
           button { transition: all 0.15s; }
-          button:hover { opacity: 0.85; }
           ::-webkit-scrollbar { width: 4px; }
           ::-webkit-scrollbar-track { background: ${C.bgCard}; }
           ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 2px; }
@@ -220,7 +325,7 @@ export default function Dashboard() {
           {report && !loading && (
             <div style={{ animation: "fadeIn 0.4s ease" }}>
 
-              {/* Header card */}
+              {/* Header */}
               <div style={{ background: C.bgCard, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: "24px 28px", marginBottom: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 20 }}>
                   <div>
@@ -231,7 +336,7 @@ export default function Dashboard() {
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                       <Pill label={`MEDIA: ${report.sentimentSignal}`} color={sentColor(report.sentimentSignal)} />
                       <Pill label={`FUNDAMENTALS: ${report.fundamentalSignal}`} color={sentColor(report.fundamentalSignal)} />
-                      <Pill label={report.narrativeAlignment || "DIVERGENT"} color={report.narrativeAlignment === "ALIGNED" ? "green" : report.narrativeAlignment === "CONTRARIAN" ? "red" : "orange"} />VERGE") ? "orange" : "red"} />
+                      <Pill label={report.narrativeAlignment || "DIVERGENT"} color={report.narrativeAlignment === "ALIGNED" ? "green" : report.narrativeAlignment === "CONTRARIAN" ? "red" : "orange"} />
                       {report.contrarian && <Pill label="⚡ CONTRARIAN SIGNAL" color="orange" />}
                     </div>
                     <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: C.textDim, letterSpacing: 2 }}>DATA AS OF {report.dataAsOf} · POWERED BY CLAUDE AI</div>
@@ -240,18 +345,22 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* 🗣️ PLAIN ENGLISH BUTTON */}
+              <PlainEnglishCard report={report} />
+
               {/* Tabs */}
               <div style={{ borderBottom: `1px solid ${C.border}`, marginBottom: 20, display: "flex", gap: 0, overflowX: "auto" }}>
                 {tabs.map(t => (
                   <button key={t} onClick={() => setActiveTab(t)} style={{
                     fontFamily: "'DM Mono'", fontSize: 10, letterSpacing: 3, padding: "10px 18px",
                     color: activeTab === t ? C.orange : C.textMuted, background: "none", border: "none",
-                    borderBottom: activeTab === t ? `2px solid ${C.orange}` : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap",
+                    borderBottom: activeTab === t ? `2px solid ${C.orange}` : "2px solid transparent",
+                    cursor: "pointer", whiteSpace: "nowrap",
                   }}>{t.toUpperCase()}</button>
                 ))}
               </div>
 
-              {/* ── REPORT TAB ── */}
+              {/* Report Tab */}
               {activeTab === "report" && (
                 <div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -275,14 +384,14 @@ export default function Dashboard() {
                     <div style={{ fontFamily: "'DM Mono'", fontSize: 9, letterSpacing: 3, color: C.textDim, marginBottom: 14 }}>RISK FLAGS</div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                       {report.riskFlags?.map((r, i) => (
-                        <div key={i} style={{ background: `${C.red}0a`, border: `1px solid ${C.red}22`, borderRadius: 6, padding: "8px 14px", fontFamily: "'Outfit'", fontSize: 13, color: C.red, fontWeight: 400 }}>⚠ {r}</div>
+                        <div key={i} style={{ background: `${C.red}0a`, border: `1px solid ${C.red}22`, borderRadius: 6, padding: "8px 14px", fontFamily: "'Outfit'", fontSize: 13, color: C.red }}>⚠ {r}</div>
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* ── HEADLINES TAB ── */}
+              {/* Headlines Tab */}
               {activeTab === "headlines" && (
                 <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 22 }}>
                   <div style={{ fontFamily: "'DM Mono'", fontSize: 9, letterSpacing: 3, color: C.textDim, marginBottom: 16 }}>RECENT NEWS HEADLINES</div>
@@ -290,7 +399,7 @@ export default function Dashboard() {
                     <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, display: "flex", gap: 14, alignItems: "flex-start" }}>
                       <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, marginTop: 6, background: h.sentiment === "positive" ? C.green : h.sentiment === "negative" ? C.red : C.textMuted }} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: "'Outfit'", fontSize: 14, color: C.text, lineHeight: 1.5, fontWeight: 400 }}>{h.title}</div>
+                        <div style={{ fontFamily: "'Outfit'", fontSize: 14, color: C.text, lineHeight: 1.5 }}>{h.title}</div>
                         <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: C.textDim, marginTop: 4 }}>{h.source} · {h.publishedAt} · {h.sentiment?.toUpperCase()}</div>
                       </div>
                       <Pill label={h.sentiment?.toUpperCase()} color={h.sentiment === "positive" ? "green" : h.sentiment === "negative" ? "red" : "gray"} />
@@ -299,7 +408,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* ── FINANCIALS TAB ── */}
+              {/* Financials Tab */}
               {activeTab === "financials" && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
                   {Object.entries(report.financialSnapshot || {}).map(([k, v]) => (
@@ -308,45 +417,36 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* ── INTELLIGENCE TAB ── */}
+              {/* Intelligence Tab */}
               {activeTab === "intelligence" && (
                 <div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                    <SignalCard
-                      icon="🏛️" title="INSIDER TRADING SIGNAL"
+                    <SignalCard icon="🏛️" title="INSIDER TRADING SIGNAL"
                       value={report.insiderRaw?.signal || "N/A"}
                       detail={report.insiderSignal || "No insider data available."}
-                      color={report.insiderRaw?.signal === "BULLISH" ? C.green : report.insiderRaw?.signal === "BEARISH" ? C.red : C.orange}
-                    />
-                    <SignalCard
-                      icon="🎯" title="ANALYST CONSENSUS"
+                      color={report.insiderRaw?.signal === "BULLISH" ? C.green : report.insiderRaw?.signal === "BEARISH" ? C.red : C.orange} />
+                    <SignalCard icon="🎯" title="ANALYST CONSENSUS"
                       value={report.analystRaw?.consensus ? `${report.analystRaw.consensus} (${(report.analystRaw.strongBuy || 0) + (report.analystRaw.buy || 0)} buys / ${(report.analystRaw.sell || 0) + (report.analystRaw.strongSell || 0)} sells)` : "N/A"}
                       detail={report.analystConsensus || "No analyst data available."}
-                      color={report.analystRaw?.consensus === "BUY" ? C.green : C.red}
-                    />
+                      color={report.analystRaw?.consensus === "BUY" ? C.green : C.red} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                    <SignalCard
-                      icon="🐋" title="SMART MONEY (INSTITUTIONS)"
+                    <SignalCard icon="🐋" title="SMART MONEY (INSTITUTIONS)"
                       value={report.institutionalRaw?.totalInstitutional || "N/A"}
                       detail={report.smartMoneySignal || "No institutional data available."}
-                      color={C.orange}
-                    />
-                    <SignalCard
-                      icon="📊" title="OPTIONS SENTIMENT"
+                      color={C.orange} />
+                    <SignalCard icon="📊" title="OPTIONS SENTIMENT"
                       value="MARKET POSITIONING"
                       detail={report.optionsSentiment || "No options data available."}
-                      color={C.orange}
-                    />
+                      color={C.orange} />
                   </div>
-                  {/* Top institutional holders */}
                   {report.institutionalRaw?.topHolders?.length > 0 && (
                     <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 22 }}>
                       <div style={{ fontFamily: "'DM Mono'", fontSize: 9, letterSpacing: 3, color: C.textDim, marginBottom: 14 }}>TOP INSTITUTIONAL HOLDERS</div>
                       {report.institutionalRaw.topHolders.map((h, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                          <div style={{ fontFamily: "'Outfit'", fontSize: 14, color: C.text, fontWeight: 400 }}>{h.name}</div>
-                          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                          <div style={{ fontFamily: "'Outfit'", fontSize: 14, color: C.text }}>{h.name}</div>
+                          <div style={{ display: "flex", gap: 16 }}>
                             <span style={{ fontFamily: "'DM Mono'", fontSize: 12, color: C.textMuted }}>{h.shares}</span>
                             <span style={{ fontFamily: "'DM Mono'", fontSize: 11, color: h.change?.startsWith("+") ? C.green : C.red }}>{h.change}</span>
                           </div>
@@ -357,7 +457,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* ── CONTRARIAN TAB ── */}
+              {/* Contrarian Tab */}
               {activeTab === "contrarian" && (
                 <div>
                   <div style={{ background: C.bgCard, border: `1px solid ${C.orange}33`, borderRadius: 8, padding: 24, marginBottom: 16 }}>
@@ -366,17 +466,17 @@ export default function Dashboard() {
                       <div style={{ fontFamily: "'DM Mono'", fontSize: 9, letterSpacing: 3, color: C.textDim }}>CONTRARIAN ALERT</div>
                     </div>
                     {report.contrarianAlert
-                      ? <p style={{ fontFamily: "'Outfit'", fontSize: 16, color: C.orange, lineHeight: 1.7, margin: 0, fontWeight: 400 }}>{report.contrarianAlert}</p>
+                      ? <p style={{ fontFamily: "'Outfit'", fontSize: 16, color: C.orange, lineHeight: 1.7, margin: 0 }}>{report.contrarianAlert}</p>
                       : <p style={{ fontFamily: "'DM Mono'", fontSize: 12, color: C.textDim, margin: 0 }}>No contrarian signal detected. Narrative and fundamentals are broadly aligned.</p>
                     }
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
                     {[
-                      { label: "Media Sentiment", value: report.sentimentSignal },
-                      { label: "Fundamental Signal", value: report.fundamentalSignal },
-                      { label: "Alignment", value: report.narrativeAlignment || "DIVERGENT" },tiveAlignment },
+                      { label: "MEDIA SENTIMENT", value: report.sentimentSignal },
+                      { label: "FUNDAMENTAL SIGNAL", value: report.fundamentalSignal },
+                      { label: "ALIGNMENT", value: report.narrativeAlignment || "DIVERGENT" },
                     ].map(item => (
-                      <StatCard key={item.label} label={item.label.toUpperCase()} value={item.value || "—"} />
+                      <StatCard key={item.label} label={item.label} value={item.value || "—"} />
                     ))}
                   </div>
                 </div>
@@ -393,7 +493,7 @@ export default function Dashboard() {
                 {[
                   { icon: "◈", label: "Reality Score", desc: "0–100 narrative gap score" },
                   { icon: "◉", label: "Live Headlines", desc: "Real-time sentiment analysis" },
-                  { icon: "🏛️", label: "Insider Trades", desc: "Smart money tracking" },
+                  { icon: "🗣️", label: "Plain English", desc: "Jargon-free AI summary" },
                   { icon: "⚡", label: "Contrarian Alerts", desc: "Spot market mispricings" },
                 ].map(f => (
                   <div key={f.label} style={{ maxWidth: 160, textAlign: "center" }}>
