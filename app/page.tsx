@@ -43,7 +43,7 @@ export default function Landing() {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
           line-height: 1.05;
-          font-size: clamp(38px, 13vw, 80px);
+          font-size: clamp(28px, 8vw, 80px);
           letter-spacing: 3px;
         }
 
