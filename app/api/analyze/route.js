@@ -8,11 +8,11 @@ export async function POST(req) {
   let headlines = [];
   try {
     const newsRes = await fetch(
-      `https://newsapi.org/v2/everything?q=${sym}+stock&sortBy=publishedAt&pageSize=8&language=en&apiKey=${process.env.NEWS_API_KEY}`
-    );
+  `https://gnews.io/api/v4/search?q=${sym}+stock&sortby=publishedAt&max=8&lang=en&apikey=${process.env.GNEWS_API_KEY}`
+);
     const newsData = await newsRes.json();
-    if (newsData.articles) {
-      headlines = newsData.articles.map((a) => ({
+  if (newsData.articles) {
+  headlines = newsData.articles.map((a) => ({
         title: a.title,
         source: a.source?.name || "Unknown",
         publishedAt: a.publishedAt?.slice(0, 10),
