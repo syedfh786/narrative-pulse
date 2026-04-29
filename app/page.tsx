@@ -53,8 +53,8 @@ export default function Landing() {
           white-space: nowrap;
           line-height: 1;
           display: inline-block;
-          font-size: 6vw;
-          letter-spacing: 1px;
+          font-size: 5vw;
+          letter-spacing: 0px;
         }
         @media (min-width: 420px)  { .np-logo-text { font-size: 7vw;  } }
         @media (min-width: 600px)  { .np-logo-text { font-size: 8vw;  letter-spacing: 3px; } }
