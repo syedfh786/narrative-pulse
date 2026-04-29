@@ -38,15 +38,19 @@ export default function Landing() {
         .np-logo-text {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          letter-spacing: 2px;
+          letter-spacing: 1px;
           line-height: 1;
-          font-size: 10vw;
+          font-size: 8vw;
+          white-space: nowrap;
           max-width: 100%;
-          overflow: hidden;
-          word-break: break-word;
           margin-bottom: 10px;
       }
-      @media (min-width: 500px) { .np-logo-text { font-size: clamp(28px, 8vw, 72px); letter-spacing: 4px; } }
+      @media (min-width: 500px) { 
+        .np-logo-text { 
+          font-size: clamp(28px, 8vw, 72px); 
+          letter-spacing: 4px; 
+        } 
+      }
 
         /* Tagline */
         .np-tagline {
