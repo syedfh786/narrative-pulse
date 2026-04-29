@@ -16,7 +16,6 @@ export default function Landing() {
       position: "relative",
       overflow: "hidden",
       width: "100%",
-      maxWidth: "100vw",
       boxSizing: "border-box",
     }}>
       <style>{`
@@ -32,44 +31,30 @@ export default function Landing() {
           50%       { opacity: 0.8; }
         }
 
-        .np-badge    { animation: fadeUp 0.6s ease 0.0s both; }
-        .np-logo-row { animation: fadeUp 0.6s ease 0.1s both; }
-        .np-italic   { animation: fadeUp 0.6s ease 0.2s both; }
-        .np-desc     { animation: fadeUp 0.6s ease 0.3s both; }
-        .np-cta      { animation: fadeUp 0.6s ease 0.4s both; }
-        .np-stats    { animation: fadeUp 0.6s ease 0.5s both; }
-        .np-grid     { animation: fadeUp 0.6s ease 0.6s both; }
+        .np-badge  { animation: fadeUp 0.6s ease 0.0s both; }
+        .np-logo   { animation: fadeUp 0.6s ease 0.1s both; }
+        .np-italic { animation: fadeUp 0.6s ease 0.2s both; }
+        .np-desc   { animation: fadeUp 0.6s ease 0.3s both; }
+        .np-cta    { animation: fadeUp 0.6s ease 0.4s both; }
+        .np-stats  { animation: fadeUp 0.6s ease 0.5s both; }
+        .np-grid   { animation: fadeUp 0.6s ease 0.6s both; }
 
-        /* ── Logo ── */
-        .np-logo-wrap {
-          width: 100%;
-          overflow: hidden;
-          text-align: center;
-          margin-bottom: 10px;
-        }
-        .np-logo-text {
+        .np-logo-line {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          white-space: nowrap;
-          line-height: 1;
-          display: inline-block;
-          font-size: 1vw;
-          letter-spacing: 0px;
+          line-height: 1.05;
+          font-size: clamp(38px, 13vw, 80px);
+          letter-spacing: 3px;
         }
-        @media (min-width: 420px)  { .np-logo-text { font-size: 7vw;  } }
-        @media (min-width: 600px)  { .np-logo-text { font-size: 8vw;  letter-spacing: 3px; } }
-        @media (min-width: 900px)  { .np-logo-text { font-size: 72px; letter-spacing: 4px; } }
 
-        /* ── Tagline ── */
         .np-tagline {
           font-family: 'Outfit', sans-serif;
           font-weight: 700;
-          font-size: clamp(15px, 4vw, 30px);
+          font-size: clamp(15px, 4vw, 28px);
           color: #fff;
           margin-bottom: 14px;
         }
 
-        /* ── Italic hook ── */
         .np-hook {
           font-family: 'Outfit', sans-serif;
           font-style: italic;
@@ -81,7 +66,6 @@ export default function Landing() {
           line-height: 1.6;
         }
 
-        /* ── Body copy ── */
         .np-body {
           font-family: 'Outfit', sans-serif;
           font-weight: 300;
@@ -92,7 +76,6 @@ export default function Landing() {
           margin: 0 auto 34px;
         }
 
-        /* ── CTA buttons ── */
         .np-cta-row {
           display: flex;
           gap: 12px;
@@ -102,6 +85,7 @@ export default function Landing() {
           width: 100%;
           max-width: 480px;
         }
+
         .np-start {
           background: #f5821f;
           color: #000;
@@ -118,6 +102,7 @@ export default function Landing() {
           transition: all 0.2s;
         }
         .np-start:hover { transform: translateY(-2px); box-shadow: 0 8px 32px #f5821f44; }
+
         .np-secondary {
           background: transparent;
           color: #555;
@@ -136,7 +121,6 @@ export default function Landing() {
         }
         .np-secondary:hover { border-color: #444; color: #888; }
 
-        /* ── Free note ── */
         .np-free {
           font-family: 'DM Mono', monospace;
           font-size: 10px;
@@ -145,7 +129,6 @@ export default function Landing() {
           margin-bottom: 48px;
         }
 
-        /* ── Stats grid ── */
         .np-stats-row {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
@@ -163,12 +146,14 @@ export default function Landing() {
           .np-stat-cell:nth-child(-n+2) { border-bottom: 1px solid #1a1a1a; padding-bottom: 16px; }
           .np-stat-cell:nth-child(n+3)  { padding-top: 16px; }
         }
+
         .np-stat-cell {
           text-align: center;
           padding: 0 12px;
           border-right: 1px solid #1a1a1a;
         }
         .np-stat-cell:last-child { border-right: none; }
+
         .np-stat-val {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
@@ -184,7 +169,6 @@ export default function Landing() {
           margin-top: 6px;
         }
 
-        /* ── Feature grid ── */
         .np-feature-grid {
           display: grid;
           grid-template-columns: 1fr;
@@ -193,8 +177,8 @@ export default function Landing() {
           width: 100%;
           margin-bottom: 48px;
         }
-        @media (min-width: 480px)  { .np-feature-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (min-width: 768px)  { .np-feature-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 480px) { .np-feature-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (min-width: 768px) { .np-feature-grid { grid-template-columns: repeat(3, 1fr); } }
 
         .np-feature {
           background: #0d0d0d;
@@ -205,6 +189,7 @@ export default function Landing() {
           transition: border-color 0.2s, background 0.2s;
         }
         .np-feature:hover { border-color: #f5821f33; background: #111318; }
+
         .np-feature-title {
           font-family: 'Syne', sans-serif;
           font-weight: 700;
@@ -215,6 +200,7 @@ export default function Landing() {
           align-items: center;
           gap: 8px;
         }
+
         .np-feature-desc {
           font-family: 'Outfit', sans-serif;
           font-size: 13px;
@@ -223,7 +209,6 @@ export default function Landing() {
           font-weight: 300;
         }
 
-        /* ── Footer ── */
         .np-footer {
           font-family: 'DM Mono', monospace;
           font-size: 9px;
@@ -236,20 +221,19 @@ export default function Landing() {
       <div style={{ position: "fixed", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: "min(700px,100vw)", height: "min(700px,100vw)", background: "radial-gradient(circle,#f5821f05 0%,transparent 70%)", pointerEvents: "none" }} />
 
       {/* Live badge */}
-      <div className="np-badge" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#f5821f12", border: "1px solid #f5821f33", borderRadius: 20, padding: "6px 16px", marginBottom: 26 }}>
+      <div className="np-badge" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#f5821f12", border: "1px solid #f5821f33", borderRadius: 20, padding: "6px 16px", marginBottom: 20 }}>
         <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f5821f", animation: "pulse 2s infinite", flexShrink: 0 }} />
         <span style={{ fontFamily: "'DM Mono'", fontSize: 10, letterSpacing: 3, color: "#f5821f" }}>LIVE MARKET INTELLIGENCE</span>
       </div>
 
-      {/* Logo */}
-      <div className="np-logo-row np-logo-wrap">
-        <span className="np-logo-text">
-          NARRATIVE<span style={{ color: "#f5821f" }}>PULSE</span>
-        </span>
+      {/* Logo — two lines, never overflows */}
+      <div className="np-logo" style={{ marginBottom: 12, lineHeight: 1 }}>
+        <div className="np-logo-line" style={{ color: "#fff" }}>NARRATIVE</div>
+        <div className="np-logo-line" style={{ color: "#f5821f" }}>PULSE</div>
       </div>
 
       {/* Tagline */}
-      <div className="np-logo-row np-tagline">Does the story match the numbers?</div>
+      <div className="np-logo np-tagline">Does the story match the numbers?</div>
 
       {/* Italic hook */}
       <div className="np-italic np-hook">
@@ -261,7 +245,7 @@ export default function Landing() {
         We scan live news headlines and real earnings data for any stock ticker, then use AI to score how well the media narrative matches the financial reality — exposing hype, fear, and hidden opportunity.
       </p>
 
-      {/* CTA */}
+      {/* CTA buttons */}
       <div className="np-cta np-cta-row">
         <Link href="/dashboard" className="np-start">START ANALYSIS →</Link>
         <Link href="/dashboard" className="np-secondary">See how it works</Link>
