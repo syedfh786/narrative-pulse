@@ -1,203 +1,308 @@
 import { NextResponse } from "next/server";
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+function truncate(text, maxChars = 2000) {
+  if (!text) return "";
+  return text.length > maxChars ? text.slice(0, maxChars) + "…" : text;
+}
+
+function cleanFilingText(raw) {
+  return raw
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s{3,}/g, " ")
+    .trim();
+}
+
+// Fetch with timeout to prevent hanging
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 export async function POST(req) {
   const { ticker } = await req.json();
   const sym = ticker.toUpperCase();
 
-  // ── 1. Fetch Live News Headlines (GNews) ──────────────────────────────────
-  let headlines = [];
-  try {
-    const newsRes = await fetch(
-      `https://gnews.io/api/v4/search?q=${sym}+stock&sortby=publishedAt&max=8&lang=en&apikey=${process.env.GNEWS_API_KEY}`
-    );
-    const newsData = await newsRes.json();
-    if (newsData.articles) {
-      headlines = newsData.articles.map((a) => ({
-        title: a.title,
-        source: a.source?.name || "Unknown",
-        publishedAt: a.publishedAt?.slice(0, 10),
-        description: a.description || "",
-      }));
-    }
-  } catch (e) {
-    console.error("GNews API error:", e.message);
+  // Run all data fetches in parallel for speed
+  const [headlinesResult, fmpResult, secResult] = await Promise.allSettled([
+    fetchHeadlines(sym),
+    fetchFinancials(sym),
+    fetchSecFiling(sym),
+  ]);
+
+  const headlines = headlinesResult.status === "fulfilled" ? headlinesResult.value : [];
+  const { financials, profile, insiderData, analystData, institutionalData } =
+    fmpResult.status === "fulfilled" ? fmpResult.value : { financials: {}, profile: {}, insiderData: {}, analystData: {}, institutionalData: {} };
+  const secData = secResult.status === "fulfilled" ? secResult.value : { found: false };
+
+  console.log(`[${sym}] Headlines: ${headlines.length}, FMP: ${Object.keys(financials).length} fields, SEC: ${secData.found}`);
+
+  // Build prompt and call Claude
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await callClaude(sym, today, headlines, financials, profile, insiderData, analystData, institutionalData, secData);
+
+  // Inject real data
+  if (Object.keys(financials).length > 0) {
+    result.financialSnapshot = {
+      currentPrice: financials.currentPrice || "N/A",
+      revenue: financials.revenue || "N/A",
+      eps: financials.eps || "N/A",
+      grossMargin: financials.grossMargin || "N/A",
+      "52w High": financials.yearHigh || "N/A",
+      "52w Low": financials.yearLow || "N/A",
+      "P/E Ratio": financials.peRatio || "N/A",
+      "Market Cap": profile.marketCap || "N/A",
+      todayChange: financials.priceChange || "N/A",
+      nextEarnings: financials.earningsDate || "N/A",
+    };
   }
 
-  // ── 2. Fetch Live Financials (FMP) ────────────────────────────────────────
-  let financials = {};
-  let profile = {};
-  let insiderData = [];
-  let analystData = {};
-  let institutionalData = {};
+  result.insiderRaw = insiderData;
+  result.analystRaw = analystData;
+  result.institutionalRaw = institutionalData;
+  result.secFiling = { found: secData.found, type: secData.filingType, date: secData.filingDate };
 
-  try {
-    const [incomeRes, profileRes, quoteRes, insiderRes, analystRes, institutionalRes] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?limit=1&apikey=${process.env.FMP_API_KEY}`),
-      fetch(`https://financialmodelingprep.com/api/v3/profile/${sym}?apikey=${process.env.FMP_API_KEY}`),
-      fetch(`https://financialmodelingprep.com/api/v3/quote/${sym}?apikey=${process.env.FMP_API_KEY}`),
-      fetch(`https://financialmodelingprep.com/api/v4/insider-trading?symbol=${sym}&limit=10&apikey=${process.env.FMP_API_KEY}`),
-      fetch(`https://financialmodelingprep.com/api/v3/analyst-stock-recommendations/${sym}?limit=5&apikey=${process.env.FMP_API_KEY}`),
-      fetch(`https://financialmodelingprep.com/api/v3/institutional-holder/${sym}?apikey=${process.env.FMP_API_KEY}`),
-    ]);
+  return NextResponse.json(result);
+}
 
-    const [incomeData, profileData, quoteData, insiderRaw, analystRaw, institutionalRaw] = await Promise.all([
-      incomeRes.json(),
-      profileRes.json(),
-      quoteRes.json(),
-      insiderRes.json(),
-      analystRes.json(),
-      institutionalRes.json(),
-    ]);
+// ── Fetch Headlines ────────────────────────────────────────────────────────
+async function fetchHeadlines(sym) {
+  const res = await fetchWithTimeout(
+    `https://gnews.io/api/v4/search?q=${sym}+stock&sortby=publishedAt&max=8&lang=en&apikey=${process.env.GNEWS_API_KEY}`,
+    {}, 6000
+  );
+  const data = await res.json();
+  if (!data.articles) return [];
+  return data.articles.map((a) => ({
+    title: a.title,
+    source: a.source?.name || "Unknown",
+    publishedAt: a.publishedAt?.slice(0, 10),
+    description: a.description || "",
+  }));
+}
 
-    // Income statement
-    if (incomeData[0]) {
-      const i = incomeData[0];
-      financials = {
-        revenue: `$${(i.revenue / 1e9).toFixed(1)}B`,
-        grossProfit: `$${(i.grossProfit / 1e9).toFixed(1)}B`,
-        netIncome: `$${(i.netIncome / 1e9).toFixed(1)}B`,
-        eps: `$${i.eps?.toFixed(2) || "N/A"}`,
-        period: i.date,
-        grossMargin: `${((i.grossProfit / i.revenue) * 100).toFixed(1)}%`,
-        operatingIncome: `$${(i.operatingIncome / 1e9).toFixed(1)}B`,
-      };
+// ── Fetch Financials ───────────────────────────────────────────────────────
+async function fetchFinancials(sym) {
+  const base = "https://financialmodelingprep.com/api/v3";
+  const key = process.env.FMP_API_KEY;
+  const headers = {};
+
+  const [incomeRes, profileRes, quoteRes, insiderRes, analystRes, institutionalRes] = await Promise.allSettled([
+    fetchWithTimeout(`${base}/income-statement/${sym}?limit=1&apikey=${key}`, { headers }, 6000),
+    fetchWithTimeout(`${base}/profile/${sym}?apikey=${key}`, { headers }, 6000),
+    fetchWithTimeout(`${base}/quote/${sym}?apikey=${key}`, { headers }, 6000),
+    fetchWithTimeout(`https://financialmodelingprep.com/api/v4/insider-trading?symbol=${sym}&limit=10&apikey=${key}`, { headers }, 6000),
+    fetchWithTimeout(`${base}/analyst-stock-recommendations/${sym}?limit=5&apikey=${key}`, { headers }, 6000),
+    fetchWithTimeout(`${base}/institutional-holder/${sym}?apikey=${key}`, { headers }, 6000),
+  ]);
+
+  let financials = {}, profile = {}, insiderData = {}, analystData = {}, institutionalData = {};
+
+  if (incomeRes.status === "fulfilled") {
+    const d = await incomeRes.value.json();
+    if (d[0]) {
+      const i = d[0];
+      financials.revenue = `$${(i.revenue / 1e9).toFixed(1)}B`;
+      financials.grossProfit = `$${(i.grossProfit / 1e9).toFixed(1)}B`;
+      financials.netIncome = `$${(i.netIncome / 1e9).toFixed(1)}B`;
+      financials.eps = `$${i.eps?.toFixed(2) || "N/A"}`;
+      financials.grossMargin = `${((i.grossProfit / i.revenue) * 100).toFixed(1)}%`;
+      financials.operatingIncome = `$${(i.operatingIncome / 1e9).toFixed(1)}B`;
     }
+  }
 
-    // Profile
-    if (profileData[0]) {
-      const p = profileData[0];
-      profile = {
-        companyName: p.companyName,
-        sector: p.sector,
-        industry: p.industry,
-        marketCap: `$${(p.mktCap / 1e9).toFixed(1)}B`,
-        peRatio: p.pe?.toFixed(1),
-        beta: p.beta?.toFixed(2),
-        description: p.description?.slice(0, 300),
-      };
+  if (profileRes.status === "fulfilled") {
+    const d = await profileRes.value.json();
+    if (d[0]) {
+      profile.companyName = d[0].companyName;
+      profile.sector = d[0].sector;
+      profile.marketCap = `$${(d[0].mktCap / 1e9).toFixed(1)}B`;
+      profile.peRatio = d[0].pe?.toFixed(1);
     }
+  }
 
-    // Quote
-    if (quoteData[0]) {
-      const q = quoteData[0];
-      financials.currentPrice = `$${q.price?.toFixed(2)}`;
-      financials.yearHigh = `$${q.yearHigh?.toFixed(2)}`;
-      financials.yearLow = `$${q.yearLow?.toFixed(2)}`;
-      financials.peRatio = q.pe?.toFixed(1);
-      financials.earningsDate = q.earningsAnnouncement?.slice(0, 10) || "N/A";
-      financials.priceChange = `${q.changesPercentage?.toFixed(2)}%`;
+  if (quoteRes.status === "fulfilled") {
+    const d = await quoteRes.value.json();
+    if (d[0]) {
+      financials.currentPrice = `$${d[0].price?.toFixed(2)}`;
+      financials.yearHigh = `$${d[0].yearHigh?.toFixed(2)}`;
+      financials.yearLow = `$${d[0].yearLow?.toFixed(2)}`;
+      financials.peRatio = d[0].pe?.toFixed(1);
+      financials.earningsDate = d[0].earningsAnnouncement?.slice(0, 10) || "N/A";
+      financials.priceChange = `${d[0].changesPercentage?.toFixed(2)}%`;
     }
+  }
 
-    // Insider trading
-    if (Array.isArray(insiderRaw) && insiderRaw.length > 0) {
-      const buys = insiderRaw.filter(t => t.transactionType?.toLowerCase().includes("buy") || t.acquisitionOrDisposition === "A");
-      const sells = insiderRaw.filter(t => t.transactionType?.toLowerCase().includes("sale") || t.acquisitionOrDisposition === "D");
+  if (insiderRes.status === "fulfilled") {
+    const d = await insiderRes.value.json();
+    if (Array.isArray(d) && d.length > 0) {
+      const buys = d.filter(t => t.acquisitionOrDisposition === "A");
+      const sells = d.filter(t => t.acquisitionOrDisposition === "D");
       insiderData = {
         recentBuys: buys.length,
         recentSells: sells.length,
         signal: buys.length > sells.length ? "BULLISH" : sells.length > buys.length ? "BEARISH" : "NEUTRAL",
-        topTransaction: insiderRaw[0] ? {
-          name: insiderRaw[0].reportingName,
-          type: insiderRaw[0].transactionType,
-          shares: insiderRaw[0].securitiesTransacted?.toLocaleString(),
-          date: insiderRaw[0].transactionDate,
-        } : null,
+        topTransaction: d[0] ? { name: d[0].reportingName, type: d[0].transactionType, shares: d[0].securitiesTransacted?.toLocaleString(), date: d[0].transactionDate } : null,
       };
     }
-
-    // Analyst recommendations
-    if (Array.isArray(analystRaw) && analystRaw.length > 0) {
-      const latest = analystRaw[0];
-      analystData = {
-        strongBuy: latest.analystRatingsStrongBuy || 0,
-        buy: latest.analystRatingsbuy || 0,
-        hold: latest.analystRatingsHold || 0,
-        sell: latest.analystRatingsSell || 0,
-        strongSell: latest.analystRatingsStrongSell || 0,
-        consensus: latest.analystRatingsStrongBuy + latest.analystRatingsbuy > latest.analystRatingsSell + latest.analystRatingsStrongSell ? "BUY" : "SELL",
-      };
-    }
-
-    // Institutional ownership
-    if (Array.isArray(institutionalRaw) && institutionalRaw.length > 0) {
-      const top3 = institutionalRaw.slice(0, 3);
-      institutionalData = {
-        topHolders: top3.map(h => ({ name: h.holder, shares: (h.shares / 1e6).toFixed(1) + "M", change: h.change > 0 ? `+${(h.change / 1e6).toFixed(1)}M` : `${(h.change / 1e6).toFixed(1)}M` })),
-        totalInstitutional: institutionalRaw.length + " institutions",
-      };
-    }
-
-  } catch (e) {
-    console.error("FMP API error:", e.message);
   }
 
-  // ── 3. Build Claude Prompt ────────────────────────────────────────────────
-  const today = new Date().toISOString().slice(0, 10);
+  if (analystRes.status === "fulfilled") {
+    const d = await analystRes.value.json();
+    if (Array.isArray(d) && d.length > 0) {
+      const l = d[0];
+      analystData = {
+        strongBuy: l.analystRatingsStrongBuy || 0,
+        buy: l.analystRatingsbuy || 0,
+        hold: l.analystRatingsHold || 0,
+        sell: l.analystRatingsSell || 0,
+        strongSell: l.analystRatingsStrongSell || 0,
+        consensus: (l.analystRatingsStrongBuy + l.analystRatingsbuy) > (l.analystRatingsSell + l.analystRatingsStrongSell) ? "BUY" : "SELL",
+      };
+    }
+  }
 
-  const systemPrompt = `You are a financial intelligence engine for Narrative-Pulse. You detect gaps between public media sentiment and fundamental financial reality. Today's date is ${today}.
+  if (institutionalRes.status === "fulfilled") {
+    const d = await institutionalRes.value.json();
+    if (Array.isArray(d) && d.length > 0) {
+      institutionalData = {
+        topHolders: d.slice(0, 3).map(h => ({
+          name: h.holder,
+          shares: (h.shares / 1e6).toFixed(1) + "M",
+          change: h.change > 0 ? `+${(h.change / 1e6).toFixed(1)}M` : `${(h.change / 1e6).toFixed(1)}M`,
+        })),
+        totalInstitutional: d.length + " institutions",
+      };
+    }
+  }
 
-You will be given LIVE data: real news headlines, financial statements, insider trading, analyst ratings, and institutional ownership. Use ALL of this data to produce your analysis.
-
-Return ONLY valid JSON (no markdown fences) with this exact structure:
-{
-  "ticker": "AAPL",
-  "companyName": "Apple Inc.",
-  "realityScore": 72,
-  "sentimentSignal": "BULLISH",
-  "fundamentalSignal": "BULLISH",
-  "narrativeAlignment": "ALIGNED" or "DIVERGENT" or "CONTRARIAN",
-  "contrarian": false,
-  "headlines": [{"title":"...","sentiment":"positive","source":"...","publishedAt":"YYYY-MM-DD"}],
-  "financialSnapshot": {"revenue":"...","eps":"...","guidance":"...","keyMetric":"..."},
-  "gapAnalysis": "2-3 sentence analysis of gap between narrative and reality based on live data.",
-  "contrarianAlert": "1-2 sentence contrarian opportunity if applicable, empty string if none.",
-  "bullBearCase": {"bull": "One sentence bull case.", "bear": "One sentence bear case."},
-  "riskFlags": ["risk 1", "risk 2", "risk 3"],
-  "insiderSignal": "BULLISH/BEARISH/NEUTRAL with one sentence explanation.",
-  "analystConsensus": "Summary of analyst ratings in one sentence.",
-  "smartMoneySignal": "One sentence on what institutional ownership changes suggest.",
-  "optionsSentiment": "Based on your knowledge, what does options market positioning suggest for this stock? One sentence.",
-  "dataAsOf": "${today}"
+  return { financials, profile, insiderData, analystData, institutionalData };
 }
 
-Reality Score guide:
-80-100: Media narrative FULLY ALIGNS with fundamentals
-60-79: Mostly aligned with minor divergence
-40-59: Notable divergence
-20-39: Strong contrarian signal
-0-19: Extreme disconnect`;
+// ── Fetch SEC EDGAR ────────────────────────────────────────────────────────
+async function fetchSecFiling(sym) {
+  const SEC_HEADERS = { "User-Agent": "NarrativePulse contact@narrativepulse.com" };
 
-  const userMessage = `Analyze ${sym} using this LIVE data pulled today (${today}):
+  try {
+    // Use the faster ticker search endpoint instead of loading the full map
+    const searchRes = await fetchWithTimeout(
+      `https://efts.sec.gov/LATEST/search-index?q=%22${sym}%22&forms=10-K,10-Q&dateRange=custom&startdt=2023-01-01&enddt=2099-01-01`,
+      { headers: SEC_HEADERS }, 5000
+    );
 
-LIVE NEWS HEADLINES:
-${headlines.length > 0
-    ? headlines.map((h, i) => `${i + 1}. "${h.title}" — ${h.source} (${h.publishedAt})`).join("\n")
-    : "No headlines available."}
+    // Use company search API - much faster than loading full ticker map
+    const companyRes = await fetchWithTimeout(
+      `https://www.sec.gov/cgi-bin/browse-edgar?company=&CIK=${sym}&type=10-K&dateb=&owner=include&count=1&search_text=&action=getcompany&output=atom`,
+      { headers: SEC_HEADERS }, 5000
+    );
+    const companyXml = await companyRes.text();
 
-LIVE FINANCIALS:
-${Object.entries(financials).map(([k, v]) => `${k}: ${v}`).join("\n")}
+    // Extract CIK from XML response
+    const cikMatch = companyXml.match(/\/cgi-bin\/browse-edgar\?action=getcompany&CIK=(\d+)/);
+    if (!cikMatch) return { found: false };
 
-COMPANY PROFILE:
-${Object.entries(profile).filter(([k]) => k !== "description").map(([k, v]) => `${k}: ${v}`).join("\n")}
+    const cik = cikMatch[1].padStart(10, "0");
 
-INSIDER TRADING (last 10 transactions):
-${insiderData && insiderData.recentBuys !== undefined
-    ? `Buys: ${insiderData.recentBuys}, Sells: ${insiderData.recentSells}, Signal: ${insiderData.signal}${insiderData.topTransaction ? `\nLatest: ${insiderData.topTransaction.name} — ${insiderData.topTransaction.type} ${insiderData.topTransaction.shares} shares on ${insiderData.topTransaction.date}` : ""}`
-    : "Insider data unavailable."}
+    // Get submissions
+    const subRes = await fetchWithTimeout(
+      `https://data.sec.gov/submissions/CIK${cik}.json`,
+      { headers: SEC_HEADERS }, 6000
+    );
+    const submissions = await subRes.json();
 
-ANALYST RATINGS:
-${analystData.strongBuy !== undefined
-    ? `Strong Buy: ${analystData.strongBuy}, Buy: ${analystData.buy}, Hold: ${analystData.hold}, Sell: ${analystData.sell}, Strong Sell: ${analystData.strongSell} → Consensus: ${analystData.consensus}`
-    : "Analyst data unavailable."}
+    const filings = submissions.filings?.recent;
+    if (!filings) return { found: false };
 
-INSTITUTIONAL OWNERSHIP:
-${institutionalData.topHolders
-    ? institutionalData.topHolders.map(h => `${h.name}: ${h.shares} (${h.change})`).join(", ")
-    : "Institutional data unavailable."}
+    // Find most recent 10-K or 10-Q
+    let idx = -1;
+    for (let i = 0; i < filings.form.length; i++) {
+      if (filings.form[i] === "10-K" || filings.form[i] === "10-Q") {
+        idx = i; break;
+      }
+    }
+    if (idx === -1) return { found: false };
 
-Return the full JSON analysis using all available data above.`;
+    const accession = filings.accessionNumber[idx].replace(/-/g, "");
+    const primaryDoc = filings.primaryDocument?.[idx];
+    const cikInt = parseInt(cik);
 
-  // ── 4. Call Claude ────────────────────────────────────────────────────────
+    if (!primaryDoc) return { found: false };
+
+    // Fetch the actual filing document
+    const docRes = await fetchWithTimeout(
+      `https://www.sec.gov/Archives/edgar/data/${cikInt}/${accession}/${primaryDoc}`,
+      { headers: SEC_HEADERS }, 8000
+    );
+    const rawHtml = await docRes.text();
+    const cleanText = cleanFilingText(rawHtml);
+
+    // Extract key sections
+    const mdaMatch = cleanText.match(/(?:management.{0,30}discussion|item\s*7\.?\s)/i);
+    const mdaStart = mdaMatch ? cleanText.indexOf(mdaMatch[0]) : -1;
+    const mdaExcerpt = mdaStart > -1 ? truncate(cleanText.slice(mdaStart, mdaStart + 4000), 2000) : "";
+
+    const riskMatch = cleanText.match(/(?:risk\s*factors|item\s*1a)/i);
+    const riskStart = riskMatch ? cleanText.indexOf(riskMatch[0]) : -1;
+    const riskExcerpt = riskStart > -1 ? truncate(cleanText.slice(riskStart, riskStart + 3000), 1500) : "";
+
+    const guidanceMatch = cleanText.match(/(?:outlook|guidance|forward.{0,10}looking)/i);
+    const guidanceStart = guidanceMatch ? cleanText.indexOf(guidanceMatch[0]) : -1;
+    const forwardGuidance = guidanceStart > -1 ? truncate(cleanText.slice(guidanceStart, guidanceStart + 2000), 1000) : "";
+
+    return {
+      found: true,
+      filingType: filings.form[idx],
+      filingDate: filings.filingDate[idx],
+      mdaExcerpt,
+      riskExcerpt,
+      forwardGuidance,
+    };
+  } catch (e) {
+    console.error("SEC error:", e.message);
+    return { found: false };
+  }
+}
+
+// ── Call Claude ────────────────────────────────────────────────────────────
+async function callClaude(sym, today, headlines, financials, profile, insiderData, analystData, institutionalData, secData) {
+  const systemPrompt = `You are a financial intelligence engine for Narrative-Pulse. Compare media narrative vs what companies officially disclose in SEC filings.
+
+Today: ${today}. SEC filings are the ground truth — prioritize them.
+
+Return ONLY valid JSON with this structure:
+{"ticker":"${sym}","companyName":"...","realityScore":72,"sentimentSignal":"BULLISH","fundamentalSignal":"BULLISH","narrativeAlignment":"ALIGNED","contrarian":false,"headlines":[{"title":"...","sentiment":"positive","source":"...","publishedAt":"YYYY-MM-DD"}],"financialSnapshot":{"revenue":"...","eps":"...","guidance":"...","keyMetric":"..."},"gapAnalysis":"2-3 sentences comparing media vs SEC disclosures.","secInsight":"1-2 sentences on what SEC filing reveals that media missed.","contrarianAlert":"","bullBearCase":{"bull":"...","bear":"..."},"riskFlags":["risk 1","risk 2","risk 3"],"insiderSignal":"...","analystConsensus":"...","smartMoneySignal":"...","optionsSentiment":"...","dataAsOf":"${today}"}
+
+Reality Score: 90-100=media matches SEC, 70-89=mostly aligned, 50-69=notable gaps, 30-49=significant divergence, 0-29=extreme disconnect`;
+
+  const userMessage = `Analyze ${sym} — ${today}
+
+NEWS HEADLINES:
+${headlines.length > 0 ? headlines.map((h, i) => `${i + 1}. "${h.title}" (${h.source}, ${h.publishedAt})`).join("\n") : "None available."}
+
+FINANCIALS:
+${Object.entries(financials).map(([k, v]) => `${k}: ${v}`).join("\n") || "None available."}
+Profile: ${JSON.stringify(profile)}
+
+INSIDER TRADING: ${insiderData.signal ? `${insiderData.signal} | Buys: ${insiderData.recentBuys} | Sells: ${insiderData.recentSells}` : "No data."}
+ANALYST RATINGS: ${analystData.consensus ? `${analystData.consensus} | StrongBuy:${analystData.strongBuy} Buy:${analystData.buy} Hold:${analystData.hold} Sell:${analystData.sell}` : "No data."}
+
+SEC FILING (${secData.found ? `${secData.filingType} — ${secData.filingDate}` : "not found"}):
+${secData.found ? `MD&A: ${secData.mdaExcerpt}\n\nRISK FACTORS: ${secData.riskExcerpt}\n\nGUIDANCE: ${secData.forwardGuidance}` : "SEC data unavailable — use financial data and headlines only."}
+
+Return the complete JSON analysis.`;
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -214,38 +319,9 @@ Return the full JSON analysis using all available data above.`;
   });
 
   const data = await response.json();
+  if (!response.ok || !data.content) throw new Error(data.error?.message || "Claude API error");
 
-  if (!response.ok || !data.content) {
-    console.error("Anthropic API error:", JSON.stringify(data));
-    return NextResponse.json({ error: data.error?.message || "API error" }, { status: 500 });
-  }
-
-  const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  const text = data.content.filter(b => b.type === "text").map(b => b.text).join("");
   const cleaned = text.replace(/```json|```/g, "").trim();
-
-  try {
-    const parsed = JSON.parse(cleaned);
-    // Always inject real financial snapshot
-    if (Object.keys(financials).length > 0) {
-      parsed.financialSnapshot = {
-        revenue: financials.revenue || "N/A",
-        eps: financials.eps || "N/A",
-        guidance: financials.earningsDate ? `Next earnings: ${financials.earningsDate}` : "N/A",
-        keyMetric: `P/E: ${financials.peRatio || "N/A"} · Mkt Cap: ${profile.marketCap || "N/A"}`,
-        currentPrice: financials.currentPrice || "N/A",
-        "52w High": financials.yearHigh || "N/A",
-        "52w Low": financials.yearLow || "N/A",
-        grossMargin: financials.grossMargin || "N/A",
-        todayChange: financials.priceChange || "N/A",
-      };
-    }
-    // Inject insider + institutional data
-    parsed.insiderRaw = insiderData;
-    parsed.analystRaw = analystData;
-    parsed.institutionalRaw = institutionalData;
-    return NextResponse.json(parsed);
-  } catch (e) {
-    console.error("JSON parse error:", cleaned);
-    return NextResponse.json({ error: "Failed to parse response" }, { status: 500 });
-  }
+  return JSON.parse(cleaned);
 }
